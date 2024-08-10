@@ -1,1 +1,7 @@
 venv
+# python venv
+bin
+lib
+pyvenv.cfg
+etc
+share
