@@ -1,3 +1,4 @@
+import os
 import streamlit as st
 
 st.title("My Page")
@@ -55,6 +56,10 @@ st.button(
 
 def set_langsmith_api_key(api_key):
     st.session_state.langsmith_api_key = api_key
+    os.environ["LANGCHAIN_API_KEY"] = api_key
+    os.environ["LANGCHAIN_TRACING_V2"] = "true"
+    os.environ["LANGCHAIN_ENDPOINT"] = "https://api.smith.langchain.com"
+    os.environ["LANGCHAIN_PROJECT"] = "My GPT"
 
 
 langsmith_api_key = st.text_input("LANGSMITH API KEY")

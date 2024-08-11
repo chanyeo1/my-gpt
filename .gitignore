@@ -5,3 +5,6 @@ lib
 pyvenv.cfg
 etc
 share
+
+# custom
+modules/my_gpt/__pycache__

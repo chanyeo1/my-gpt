@@ -2,17 +2,14 @@ import streamlit as st
 
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.prompts import MessagesPlaceholder
-from langchain_openai import ChatOpenAI
-from langchain_anthropic import ChatAnthropic
-from langchain_cohere import ChatCohere
-from langchain_upstage import ChatUpstage
-from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_core.chat_history import (
     BaseChatMessageHistory,
     InMemoryChatMessageHistory,
 )
 from langchain_core.runnables.history import RunnableWithMessageHistory
 from langchain_core.messages import HumanMessage
+
+from modules.my_gpt.model import get_model
 
 # 채팅 히스토리 초기화
 if "store" not in st.session_state:
@@ -21,47 +18,7 @@ if "store" not in st.session_state:
 if "messages" not in st.session_state:
     st.session_state["messages"] = []
 
-
 st.title("My ChatGPT")
-
-
-# 설정 페이지에서 선택한 모델을 반환
-def get_model():
-    model_id = st.session_state._model_id
-    model = None
-    if model_id == 0:  # OPENAI
-        model = ChatOpenAI(
-            model="gpt-4o-mini",
-            temperature=0,
-            max_tokens=None,
-            timeout=None,
-            max_retries=2,
-            api_key=st.session_state._model_api_key,
-        )
-    elif model_id == 1:  # ANTHROPIC
-        model = ChatAnthropic(
-            model="claude-3-5-sonnet-20240620",
-            temperature=0,
-            max_tokens=1024,
-            timeout=None,
-            max_retries=2,
-            api_key=st.session_state._model_api_key,
-        )
-    elif model_id == 2:  # COHERE
-        model = ChatCohere(cohere_api_key=st.session_state._model_api_key)
-    elif model_id == 3:  # UPSTAGE
-        model = ChatUpstage(upstage_api_key=st.session_state._model_api_key)
-    elif model_id == 4:  # GEMINI
-        model = ChatGoogleGenerativeAI(
-            model="gemini-1.5-pro-latest",
-            temperature=0,
-            max_tokens=None,
-            timeout=None,
-            max_retries=2,
-            google_api_key=st.session_state._model_api_key,
-        )
-
-    return model
 
 
 # 세션 아이디(session_id)를 받아서 메세지 히스토리 오브젝트를 반환
@@ -85,7 +42,10 @@ def create_chat_chain():
     )
 
     # GPT 모델
-    llm = get_model()
+    llm = get_model(
+        model_id=st.session_state._model_id,
+        model_api_key=st.session_state._model_api_key,
+    )
 
     # 체인 생성
     chat_chain = prompt | llm
