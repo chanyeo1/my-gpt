@@ -1,19 +1,23 @@
 import streamlit as st
 import tempfile
+import time
 
 from langchain_openai import OpenAIEmbeddings
 from langchain_community.document_loaders import PyPDFLoader
 from langchain_community.vectorstores import FAISS
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.prompts import MessagesPlaceholder
-from langchain_core.runnables import RunnablePassthrough
 from langchain_core.runnables.history import RunnableWithMessageHistory
-from langchain_core.output_parsers import StrOutputParser
 from langchain_core.chat_history import (
     BaseChatMessageHistory,
     InMemoryChatMessageHistory,
 )
 from langchain_core.messages import HumanMessage
+
+from langchain.chains import create_history_aware_retriever
+from langchain.chains import create_retrieval_chain
+from langchain.chains.combine_documents import create_stuff_documents_chain
+
 
 from modules.my_gpt.model import get_model
 
@@ -44,6 +48,12 @@ def format_docs(docs):
     return "\n\n".join(doc.page_content for doc in docs)
 
 
+def response_generator(response):
+    for word in response["answer"].split():
+        yield word + " "
+        time.sleep(0.05)
+
+
 # RAG 체인 생성
 def create_rag_chain():
     # 모델 생성
@@ -62,6 +72,27 @@ def create_rag_chain():
         retriever = faiss_index.as_retriever()
 
         # 시스템 프롬프트 생성
+        contextualize_q_system_prompt = (
+            "Given a chat history and the latest user question "
+            "which might reference context in the chat history, "
+            "formulate a standalone question which can be understood "
+            "without the chat history. Do NOT answer the question, "
+            "just reformulate it if needed and otherwise return it as is."
+        )
+
+        contextualize_q_prompt = ChatPromptTemplate.from_messages(
+            [
+                ("system", contextualize_q_system_prompt),
+                MessagesPlaceholder("chat_history"),
+                ("human", "{input}"),
+            ]
+        )
+
+        # retriever 체인 생성
+        history_aware_retriever = create_history_aware_retriever(
+            llm, retriever, contextualize_q_prompt
+        )
+
         system_prompt = (
             "You are an assistant for question-answering tasks. "
             "Use the following pieces of retrieved context to answer "
@@ -72,27 +103,29 @@ def create_rag_chain():
             "{context}"
         )
 
-        # 사용자 프롬프트 생성
-        prompt = ChatPromptTemplate.from_messages(
+        qa_prompt = ChatPromptTemplate.from_messages(
             [
                 ("system", system_prompt),
-                # MessagesPlaceholder(variable_name="messages"),
+                MessagesPlaceholder("chat_history"),
                 ("human", "{input}"),
             ]
         )
 
-        # RAG 체인 생성
-        rag_chain = (
-            {
-                "context": retriever | format_docs,
-                "input": RunnablePassthrough(),
-            }
-            | prompt
-            | llm
-            | StrOutputParser()
+        question_answer_chain = create_stuff_documents_chain(llm, qa_prompt)
+
+        rag_chain = create_retrieval_chain(
+            history_aware_retriever, question_answer_chain
         )
 
-        return rag_chain
+        # conversational rag 체인 생성
+        conversational_rag_chain = RunnableWithMessageHistory(
+            rag_chain,
+            get_session_history,
+            input_messages_key="input",
+            history_messages_key="chat_history",
+        )
+
+        return conversational_rag_chain
     else:
         prompt = ChatPromptTemplate.from_messages(
             [
@@ -120,7 +153,11 @@ def generate_response(human_message):
     chain = create_rag_chain()  # RAG 체인 생성
 
     if st.session_state["_pdf_pages"]:
-        return chain.stream(human_message, config=st.session_state.session_config)
+        return response_generator(
+            chain.invoke(
+                {"input": human_message}, config=st.session_state.session_config
+            )
+        )
     else:
         return chain.stream(
             [HumanMessage(content=human_message)],
