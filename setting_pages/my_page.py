@@ -13,7 +13,7 @@ if "_model_api_key" not in st.session_state:
 model_names = ("OpenAI", "Anthropic", "Cohere", "Upstage", "Gemini")
 model_ids = list(range(len(model_names)))
 model_id = st.selectbox(
-    "모델 선택",
+    "모델 선택",
     model_ids,
     index=st.session_state._model_id,
     format_func=lambda x: model_names[x],

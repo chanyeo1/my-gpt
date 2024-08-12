@@ -7,7 +7,6 @@ from langchain_core.chat_history import (
     InMemoryChatMessageHistory,
 )
 from langchain_core.runnables.history import RunnableWithMessageHistory
-from langchain_core.messages import HumanMessage
 
 from modules.my_gpt.model import get_model
 
@@ -17,6 +16,10 @@ if "store" not in st.session_state:
 
 if "messages" not in st.session_state:
     st.session_state["messages"] = []
+
+# 세션 정보
+if "session_config" not in st.session_state:
+    st.session_state.session_config = {"configurable": {"session_id": "abc2"}}
 
 st.title("My ChatGPT")
 
@@ -37,7 +40,8 @@ def create_chat_chain():
                 "system",
                 "You are a helpful assistant. Answer all questions to the best of your ability.",
             ),
-            MessagesPlaceholder(variable_name="messages"),
+            MessagesPlaceholder(variable_name="chat_history"),
+            ("human", "{input}"),
         ]
     )
 
@@ -53,14 +57,12 @@ def create_chat_chain():
     # 메시지 히스토리 조회 단계 추가
     chat_chain_with_history = RunnableWithMessageHistory(
         chat_chain,
-        get_session_history,
+        get_session_history,                    # 세션 아이디로 메모리 오브젝트를 반환
+        input_messages_key="input",             # 프롬프트의 input에 입력값(딕셔너리)의 input 입력
+        history_messages_key="chat_history",    # 프롬프트의 chat_history에 메시지 히스토리 입력
     )
 
     return chat_chain_with_history
-
-
-# 세션정보
-config = {"configurable": {"session_id": "abc2"}}
 
 
 # AI 답변 생성
@@ -73,7 +75,8 @@ def generate_response(human_message):
     #     config=config
     # )
 
-    return chain.stream([HumanMessage(content=human_message)], config=config)
+    # return chain.stream([HumanMessage(content=human_message)], config=config)
+    return chain.stream({"input": human_message}, config=st.session_state.session_config)
 
 
 # 앱 재실행시 채팅 메시지 표시
