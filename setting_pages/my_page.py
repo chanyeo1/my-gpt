@@ -9,6 +9,9 @@ if "_model_id" not in st.session_state:
 if "_model_api_key" not in st.session_state:
     st.session_state._model_api_key = None
 
+if "_langsmith_api_key" not in st.session_state:
+    st.session_state._langsmith_api_key = None
+
 # 모델 셀렉터 박스
 model_names = ("OpenAI", "Anthropic", "Cohere", "Upstage", "Gemini")
 model_ids = list(range(len(model_names)))
@@ -55,14 +58,17 @@ st.button(
 
 
 def set_langsmith_api_key(api_key):
-    st.session_state.langsmith_api_key = api_key
+    st.session_state._langsmith_api_key = api_key
     os.environ["LANGCHAIN_API_KEY"] = api_key
     os.environ["LANGCHAIN_TRACING_V2"] = "true"
     os.environ["LANGCHAIN_ENDPOINT"] = "https://api.smith.langchain.com"
     os.environ["LANGCHAIN_PROJECT"] = "My GPT"
 
 
-langsmith_api_key = st.text_input("LANGSMITH API KEY")
+langsmith_api_key = st.text_input(
+    "LANGSMITH API KEY",
+    value=st.session_state._langsmith_api_key,
+)
 
 st.button(
     "save",
