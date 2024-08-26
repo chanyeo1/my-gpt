@@ -4,10 +4,5 @@ langchain-openai
 langchain-community
 langgraph
 tavily-python
-langchain-anthropic
-langchain-openai
-langchain-cohere
-langchain-upstage
-langchain-google-genai
-pypdf
 faiss-cpu
+pdfplumber

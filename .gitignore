@@ -8,3 +8,6 @@ share
 
 # custom
 modules/my_gpt/__pycache__
+
+# file upload setting
+.cache
