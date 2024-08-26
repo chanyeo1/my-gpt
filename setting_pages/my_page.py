@@ -13,7 +13,7 @@ if "_langsmith_api_key" not in st.session_state:
     st.session_state._langsmith_api_key = None
 
 # 모델 셀렉터 박스
-model_names = ("OpenAI", "Anthropic", "Cohere", "Upstage", "Gemini")
+model_names = ("OpenAI",)
 model_ids = list(range(len(model_names)))
 model_id = st.selectbox(
     "모델 선택",
