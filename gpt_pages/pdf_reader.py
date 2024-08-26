@@ -1,10 +1,7 @@
 import streamlit as st
-import tempfile
 import time
+import os
 
-from langchain_openai import OpenAIEmbeddings
-from langchain_community.document_loaders import PyPDFLoader
-from langchain_community.vectorstores import FAISS
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.prompts import MessagesPlaceholder
 from langchain_core.runnables.history import RunnableWithMessageHistory
@@ -20,6 +17,7 @@ from langchain.chains.combine_documents import create_stuff_documents_chain
 
 
 from modules.my_gpt.model import get_model
+from modules.my_gpt.retriever import create_retriever
 
 # 채팅 히스토리 초기화
 if "store" not in st.session_state:
@@ -31,6 +29,14 @@ if "messages" not in st.session_state:
 # 업로드한 PDF 파일 데이터(컨텍스트) 초기화
 if "_pdf_pages" not in st.session_state:
     st.session_state._pdf_pages = []
+
+# 파일 업로드 전용 폴더
+if not os.path.exists(".cache/files"):
+    os.makedirs(".cache/files")
+
+# 업로드한 PDF 파일 경로
+if "_uploaded_pdf_file_path" not in st.session_state:
+    st.session_state._uploaded_pdf_file_path = None
 
 # 세션 정보
 if "session_config" not in st.session_state:
@@ -62,121 +68,98 @@ def create_rag_chain():
         model_api_key=st.session_state._model_api_key,
     )
 
-    if st.session_state["_pdf_pages"]:
-        faiss_index = FAISS.from_documents(
-            st.session_state._pdf_pages,
-            OpenAIEmbeddings(api_key=st.session_state._model_api_key),
-        )
+    # 검색자 생성
+    retriever = create_retriever(
+        st.session_state._uploaded_pdf_file_path, 
+        st.session_state._model_api_key
+    )
 
-        # 검색자 생성
-        retriever = faiss_index.as_retriever()
+    # 시스템 프롬프트 생성
+    contextualize_q_system_prompt = (
+        "Given a chat history and the latest user question "
+        "which might reference context in the chat history, "
+        "formulate a standalone question which can be understood "
+        "without the chat history. Do NOT answer the question, "
+        "just reformulate it if needed and otherwise return it as is."
+    )
 
-        # 시스템 프롬프트 생성
-        contextualize_q_system_prompt = (
-            "Given a chat history and the latest user question "
-            "which might reference context in the chat history, "
-            "formulate a standalone question which can be understood "
-            "without the chat history. Do NOT answer the question, "
-            "just reformulate it if needed and otherwise return it as is."
-        )
+    contextualize_q_prompt = ChatPromptTemplate.from_messages(
+        [
+            ("system", contextualize_q_system_prompt),
+            MessagesPlaceholder("chat_history"),
+            ("human", "{input}"),
+        ]
+    )
 
-        contextualize_q_prompt = ChatPromptTemplate.from_messages(
-            [
-                ("system", contextualize_q_system_prompt),
-                MessagesPlaceholder("chat_history"),
-                ("human", "{input}"),
-            ]
-        )
+    # retriever 체인 생성
+    history_aware_retriever = create_history_aware_retriever(
+        llm, retriever, contextualize_q_prompt
+    )
 
-        # retriever 체인 생성
-        history_aware_retriever = create_history_aware_retriever(
-            llm, retriever, contextualize_q_prompt
-        )
+    system_prompt = (
+        "You are an assistant for question-answering tasks. "
+        "Use the following pieces of retrieved context to answer "
+        "the question. If you don't know the answer, say that you "
+        "don't know. Use three sentences maximum and keep the "
+        "answer concise."
+        "\n\n"
+        "{context}"
+    )
 
-        system_prompt = (
-            "You are an assistant for question-answering tasks. "
-            "Use the following pieces of retrieved context to answer "
-            "the question. If you don't know the answer, say that you "
-            "don't know. Use three sentences maximum and keep the "
-            "answer concise."
-            "\n\n"
-            "{context}"
-        )
+    qa_prompt = ChatPromptTemplate.from_messages(
+        [
+            ("system", system_prompt),
+            MessagesPlaceholder("chat_history"),
+            ("human", "{input}"),
+        ]
+    )
 
-        qa_prompt = ChatPromptTemplate.from_messages(
-            [
-                ("system", system_prompt),
-                MessagesPlaceholder("chat_history"),
-                ("human", "{input}"),
-            ]
-        )
+    question_answer_chain = create_stuff_documents_chain(llm, qa_prompt)
 
-        question_answer_chain = create_stuff_documents_chain(llm, qa_prompt)
+    rag_chain = create_retrieval_chain(
+        history_aware_retriever, question_answer_chain
+    )
 
-        rag_chain = create_retrieval_chain(
-            history_aware_retriever, question_answer_chain
-        )
+    # conversational rag 체인 생성
+    conversational_rag_chain = RunnableWithMessageHistory(
+        rag_chain,
+        get_session_history,
+        input_messages_key="input",
+        history_messages_key="chat_history",
+        output_messages_key="answer",
+    )
 
-        # conversational rag 체인 생성
-        conversational_rag_chain = RunnableWithMessageHistory(
-            rag_chain,
-            get_session_history,
-            input_messages_key="input",
-            history_messages_key="chat_history",
-        )
-
-        return conversational_rag_chain
-    else:
-        prompt = ChatPromptTemplate.from_messages(
-            [
-                (
-                    "system",
-                    "You are a helpful assistant. Answer all questions to the best of your ability.",
-                ),
-                MessagesPlaceholder(variable_name="messages"),
-            ]
-        )
-
-        # 체인 생성
-        chat_chain = prompt | llm
-
-        # 메시지 히스토리 조회 단계 추가
-        chat_chain_with_history = RunnableWithMessageHistory(
-            chat_chain,
-            get_session_history,
-        )
-        return chat_chain_with_history
+    return conversational_rag_chain
 
 
 # GPT 채팅 응답 생성
 def generate_response(human_message):
     chain = create_rag_chain()  # RAG 체인 생성
 
-    if st.session_state["_pdf_pages"]:
-        return response_generator(
-            chain.invoke(
-                {"input": human_message}, config=st.session_state.session_config
-            )
+    return response_generator(
+        chain.invoke(
+            {"input": human_message}, config=st.session_state.session_config
         )
-    else:
-        return chain.stream(
-            [HumanMessage(content=human_message)],
-            config=st.session_state.session_config,
-        )
+    )
 
 
 # PDF 파일 업로드 핸들러
 def upload_pdf_file():
-    # 파일 업로드
-    with tempfile.NamedTemporaryFile() as fp:
-        fp.write(st.session_state.uploaded_pdf_file.getvalue())
+    file = st.session_state.uploaded_pdf_file
 
-        # 스플릿
-        loader = PyPDFLoader(fp.name)
-        pages = loader.load_and_split()
-        st.session_state._pdf_pages = st.session_state._pdf_pages + pages
+    if file is not None:
+        file_content = file.read()
+        file_path = f"./.cache/files/{file.name}"
+        with open(file_path, "wb") as f:
+            f.write(file_content)
 
-        fp.close()
+        # 업로드한 파일 경로를 세션 정보에 저장
+        st.session_state._uploaded_pdf_file_path = file_path
+    else:
+        # 업로드한 파일 삭제
+        if os.path.exists(st.session_state._uploaded_pdf_file_path):
+            os.remove(st.session_state._uploaded_pdf_file_path)
+        st.session_state._uploaded_pdf_file_path = None 
 
 
 # 앱 타이틀
