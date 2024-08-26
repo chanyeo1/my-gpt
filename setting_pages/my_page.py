@@ -13,7 +13,7 @@ if "_langsmith_api_key" not in st.session_state:
     st.session_state._langsmith_api_key = None
 
 # 모델 셀렉터 박스
-model_names = ("OpenAI",)
+model_names = ("OpenAI", "Xionic")
 model_ids = list(range(len(model_names)))
 model_id = st.selectbox(
     "모델 선택",
@@ -32,13 +32,7 @@ def set_model_setting(model_id, api_key):
 
 # 모델 API 키입력 필드
 model_api_key = None
-if (
-    model_id == 0  # OPENAI
-    or model_id == 1  # ANTHROPIC
-    or model_id == 2  # COHERE
-    or model_id == 3  # UPSTAGE
-    or model_id == 4  # GEMINI
-):
+if model_id == 0: # OPENAI
     model_api_key = st.text_input(
         "모델 API KEY",
         value=st.session_state._model_api_key,

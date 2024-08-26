@@ -1,9 +1,4 @@
 from langchain_openai import ChatOpenAI
-from langchain_anthropic import ChatAnthropic
-from langchain_cohere import ChatCohere
-from langchain_upstage import ChatUpstage
-from langchain_google_genai import ChatGoogleGenerativeAI
-
 
 # 설정 페이지에서 선택한 모델을 반환
 def get_model(model_id, model_api_key):
@@ -17,27 +12,11 @@ def get_model(model_id, model_api_key):
             max_retries=2,
             api_key=model_api_key,
         )
-    elif model_id == 1:  # ANTHROPIC
-        model = ChatAnthropic(
-            model="claude-3-5-sonnet-20240620",
-            temperature=0,
-            max_tokens=1024,
-            timeout=None,
-            max_retries=2,
-            api_key=model_api_key,
-        )
-    elif model_id == 2:  # COHERE
-        model = ChatCohere(cohere_api_key=model_api_key)
-    elif model_id == 3:  # UPSTAGE
-        model = ChatUpstage(upstage_api_key=model_api_key)
-    elif model_id == 4:  # GEMINI
-        model = ChatGoogleGenerativeAI(
-            model="gemini-1.5-pro-latest",
-            temperature=0,
-            max_tokens=None,
-            timeout=None,
-            max_retries=2,
-            google_api_key=model_api_key,
+    elif model_id == 1:  # XIONIC
+        model =  ChatOpenAI(
+            model_name="xionic-1-72b-20240610",
+            base_url="https://sionic.chat/v1/",
+            api_key="934c4bbc-c384-4bea-af82-1450d7f8128d",
         )
 
     return model
